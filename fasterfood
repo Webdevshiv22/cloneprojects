@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Faster Food — Pro Demo (QR, Card, Invoice)</title>
+
+<!-- simple reset & styles -->
+<style>
+  :root{
+    --accent:#e63946;
+    --accent-dark:#c72c38;
+    --bg:#fafafa;
+    --card-bg:#fff;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Inter, system-ui, Arial; margin:0; background:var(--bg); color:#222}
+  header{background:#111;color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between}
+  header h1{margin:0;font-size:18px}
+  nav ul{display:flex;gap:14px;list-style:none;margin:0;padding:0}
+  nav a{color:#fff;text-decoration:none;font-size:14px}
+  .hero{background:url('https://images.unsplash.com/photo-1600891964599-f61ba0e24092') center/cover no-repeat;color:#fff;padding:60px 18px;text-align:center}
+  .hero h2{margin:0;font-size:28px;text-shadow:0 3px 12px rgba(0,0,0,0.5)}
+  .container{padding:18px;max-width:1200px;margin:0 auto}
+  .catalog{margin-bottom:28px}
+  .catalog h2{text-align:center;margin:6px 0 14px}
+  .items{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+
+  .card{background:var(--card-bg);border-radius:10px;box-shadow:0 6px 18px rgba(15,15,15,0.06);overflow:hidden;display:flex;flex-direction:column}
+  .card img{width:100%;height:150px;object-fit:cover}
+  .card-body{padding:12px;flex:1;display:flex;flex-direction:column;justify-content:space-between}
+  .card-body h4{margin:0 0 6px;font-size:16px}
+  .card-body p{margin:0;color:#444}
+  .card-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fafafa}
+  .btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+  .btn:hover{background:var(--accent-dark)}
+  .cart-btn{position:fixed;right:18px;bottom:18px;background:var(--accent);color:#fff;padding:12px 16px;border-radius:999px;border:0;box-shadow:0 8px 20px rgba(0,0,0,0.15);cursor:pointer;z-index:60}
+
+  .search-area{display:flex;gap:8px;align-items:center;max-width:720px;margin:18px auto}
+  .search-area input{flex:1;padding:8px;border-radius:6px;border:1px solid #ddd}
+
+  /* Modals */
+  .modal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:92%;max-width:520px;background:#fff;border-radius:10px;box-shadow:0 18px 60px rgba(0,0,0,0.25);z-index:70;max-height:86vh;overflow:auto}
+  .modal .head{padding:12px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
+  .modal .body{padding:14px}
+  .close{background:transparent;border:0;font-size:20px;cursor:pointer}
+
+  /* Cart items */
+  .cart-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f2f2f2}
+  .cart-item img{width:62px;height:48px;object-fit:cover;border-radius:6px}
+  .qty{display:flex;align-items:center;gap:8px}
+  .qty button{width:28px;height:28px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+  .right{margin-left:auto;text-align:right}
+
+  /* Payment form */
+  .field{margin-bottom:10px}
+  input[type="text"], input[type="tel"], input[type="number"], textarea, select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
+  .small{font-size:13px;color:#666}
+  #qrcode{display:flex;justify-content:center;margin-top:10px}
+
+  /* Responsive */
+  @media (max-width:540px){
+    .hero{padding:36px 14px}
+    .card img{height:130px}
+    .search-area{padding:0 12px;flex-direction:column;align-items:stretch}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍴 Faster Food </h1>
+  <nav>
+    <ul>
+      <li><a href="#indian">Indian</a></li>
+      <li><a href="#chinese">Chinese</a></li>
+      <li><a href="#beverages">Beverages</a></li>
+      <li><a href="#desserts">Desserts</a></li>
+    </ul>
+  </nav>
+</header>
+
+<section class="hero">
+  <h2>Fresh. Fast. Delivered.</h2>
+  <p style="margin-top:8px"></p>
+</section>
+
+<!-- ===== ADDED: Price suggester UI (keeps your original code intact) ===== -->
+<div class="container">
+  <div class="search-area" aria-hidden="false">
+    <input id="priceInput" type="number" placeholder="Enter maximum price (e.g. 150)" />
+    <button class="btn" onclick="suggestByPrice()">Suggest</button>
+    <button class="btn" style="background:#777" onclick="resetCatalog()">Show All</button>
+    <div style="margin-left:16px;color:#666;font-size:13px">Shows items ≤ entered price across all categories.</div>
+  </div>
+  <!-- results appear here when Suggest is used -->
+  <div id="suggestResults" class="catalog" style="display:none">
+    <h2>Suggestions</h2>
+    <div class="items" id="suggestItems"></div>
+  </div>
+</div>
+<!-- ===== end added UI ===== -->
+
+<div class="container">
+  <!-- Indian: expanded -->
+  <div class="catalog" id="indian">
+    <h2>Indian Foods</h2>
+    <div class="items" id="indianFoods"></div>
+  </div>
+
+  <!-- Chinese: expanded -->
+  <div class="catalog" id="chinese">
+    <h2>Chinese Foods</h2>
+    <div class="items" id="chineseFoods"></div>
+  </div>
+
+  <div class="catalog" id="beverages">
+    <h2>Beverages</h2>
+    <div class="items" id="beveragesFoods"></div>
+  </div>
+
+  <div class="catalog" id="desserts">
+    <h2>Desserts</h2>
+    <div class="items" id="dessertsFoods"></div>
+  </div>
+</div>
+
+<button class="cart-btn" onclick="openCart()">🛒 View Cart (<span id="cartCount">0</span>)</button>
+
+<!-- Cart Modal -->
+<div id="cartModal" class="modal" role="dialog" aria-modal="true">
+  <div class="head">
+    <strong>Your Cart</strong>
+    <button class="close" onclick="closeCart()">×</button>
+  </div>
+  <div class="body" id="cartBody">
+    <!-- Items injected here -->
+    <div id="cartItems"></div>
+    <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+      <div class="small">Total (incl. taxes if any)</div>
+      <div><b>₹<span id="cartTotal">0</span></b></div>
+    </div>
+
+    <!-- Checkout button -->
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn" onclick="openPayment()">Proceed to Pay</button>
+      <button class="btn" style="background:#777" onclick="clearCart()">Clear Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="paymentModal" class="modal">
+  <div class="head">
+    <strong>Payment</strong>
+    <button class="close" onclick="closePayment()">×</button>
+  </div>
+  <div class="body">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <label style="flex:1"><input type="radio" name="payMethod" value="card" checked> Card</label>
+      <label style="flex:1"><input type="radio" name="payMethod" value="upi"> UPI ID</label>
+      <label style="flex:1"><input type="radio" name="payMethod" value="qr"> UPI QR</label>
+    </div>
+
+    <div id="paymentArea" style="margin-top:12px">
+      <!-- Card form shown by default -->
+      <div id="cardForm">
+        <div class="field"><label class="small">Card Number</label><input id="cardNumber" type="text" placeholder="1234 5678 9012 3456" maxlength="19" /></div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1" class="field"><label class="small">Expiry (MM/YY)</label><input id="cardExp" placeholder="MM/YY" /></div>
+          <div style="width:110px" class="field"><label class="small">CVV</label><input id="cardCVV" maxlength="4" placeholder="123" /></div>
+        </div>
+        <div class="field"><label class="small">Name on Card</label><input id="cardName" placeholder="Full name" /></div>
+      </div>
+
+      <div id="upiForm" style="display:none">
+        <div class="field"><label class="small">Enter UPI ID</label><input id="upiId" placeholder="example@upi" /></div>
+        <div class="small" id="upiStatus">Enter UPI ID and press Verify</div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn" onclick="verifyUpi()">Verify UPI</button>
+        </div>
+        <div id="upiName" style="margin-top:8px;font-weight:600"></div>
+      </div>
+
+      <div id="qrArea" style="display:none">
+        <div class="small">Scan this QR with your UPI app</div>
+        <div id="qrcode"></div>
+        <div style="margin-top:8px" class="small">QR encodes UPI link for merchant <b>fastfood@upi</b>. (Demo)</div>
+      </div>
+    </div>
+
+    <!-- Buyer details for invoice -->
+    <div style="margin-top:12px">
+      <div class="field"><label class="small">Customer Name</label><input id="custName" placeholder="Your name" /></div>
+      <div class="field"><label class="small">Phone</label><input id="custPhone" type="tel" placeholder="10 digit mobile" /></div>
+      <div class="field"><label class="small">Delivery Address</label><textarea id="custAddr" rows="2" placeholder="House / College / Hostel etc"></textarea></div>
+    </div>
+
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:space-between;align-items:center">
+      <div><b>Total: ₹<span id="payTotal">0</span></b></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="simulatePay()">Pay & Download Invoice</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+/* -------------------------
+   DATA: expanded items (I added 2 extra items per category so each has 8)
+   (kept your original items and simply appended two more per category)
+   ------------------------- */
+const catalog = {
+  indian: [
+    {name:"Paneer Butter Masala", price:250, img:"https://t4.ftcdn.net/jpg/01/44/47/11/360_F_144471106_pL9TzHPAM9Pfb0Wi1PAAVBHeO0uzMp61.jpg"},
+    {name:"Masala Dosa (2 pcs)", price:180, img:"https://shop.sresthproducts.com/wp-content/uploads/2024/12/masala-dosa.jpg"},
+    {name:"Dal Makhani", price:220, img:"https://img.freepik.com/premium-photo/photo-dal-makhani-daal-makhni-is-popular-food-from-punjab-india-made-using-whole_1138631-4508.jpg"},
+    {name:"Chole Bhature (2 pcs)", price:160, img:"https://media.istockphoto.com/id/1301949619/photo/chole-bhature-popular-indian-breakfast-snacks.jpg?s=612x612&w=0&k=20&c=FcwN99lGT24Uk1xCjpawTfX6NYvo4rFr3eAVG0maePE="},
+    {name:"Aloo Paratha (2 pcs)", price:90, img:"https://t3.ftcdn.net/jpg/09/45/46/72/360_F_945467264_13rCx2nGR9wb9wrVt2g2FEFB4tE4b8sW.jpg"},
+    {name:"Samosa (2 pcs)", price:40, img:"https://t4.ftcdn.net/jpg/02/25/73/97/360_F_225739755_KDAnE7HIBzYfzHImvgojaVARAd2LLrZW.jpg"},
+    /* two new items added below */
+    {name:"Paneer Tikka (4 pcs)", price:260, img:"https://img.freepik.com/premium-photo/paneer-tikka-is-indian-dish-made-from-chunks-cottage-cheese-marinated-spices-grilled-tandoor_466689-76784.jpg"},
+    {name:"Rajma Chawal", price:140, img:"https://eatmoreart.org/wp-content/uploads/2020/05/Rajma-Chawal-Indian-Curried-Kidney-Beans-Rice-IMG_1801-500x375.jpg"}
+  ],
+  chinese: [
+    {name:"Veg Noodles", price:150, img:"https://t3.ftcdn.net/jpg/09/76/77/48/360_F_976774856_GnhLLtdszSA0hWVJqK1umaFGhF8WK32u.jpg"},
+    {name:"Paneer Fried Rice", price:180, img:"https://enjoyinfourseason.com/wp-content/uploads/2022/05/Fourseason-PANEER-FRIED-RICE.jpg"},
+    {name:"Manchurian", price:200, img:"https://t4.ftcdn.net/jpg/08/02/44/25/360_F_802442564_uHRiD5Lc3GUHoO4DJjjqtjOLj5Qwg5fC.jpg"},
+    {name:"Spring Roll (4 pcs)", price:120, img:"https://img.freepik.com/premium-photo/delicious-looking-spring-rolls-plate-black-background_826454-687.jpg"},
+    {name:"Chilli Paneer", price:280, img:"https://static.toiimg.com/thumb/87152335/87152335.jpg?height=746&width=420&resizemode=76&imgsize=108374"},
+    {name:"Hot & Sour Soup", price:110, img:"https://www.marionskitchen.com/wp-content/uploads/2019/02/10-minute-Hot-Sour-Soup-3-e1552634823281.jpg"},
+    /* two new items added below */
+    {name:"Hakka Noodles", price:170, img:"https://www.shutterstock.com/image-photo/chicken-hakka-noodles-schezwan-szechwan-600nw-2081149771.jpg"},
+    {name:"Fried Momos (6 pcs)", price:130, img:"https://billusfood.com/wp-content/uploads/2025/02/fried-momos.jpeg"}
+  ],
+  beverages: [
+    {name:"Cold Coffee", price:120, img:"https://skydecklounge.in/wp-content/uploads/2022/01/Cold-Coffee-with-Ice-Cream.jpg"},
+    {name:"Mango Shake", price:100, img:"https://img.freepik.com/free-photo/delicious-mango-still-life_23-2151542230.jpg"},
+    {name:"Coca Cola (330ml)", price:60, img:"https://e0.pxfuel.com/wallpapers/408/971/desktop-wallpaper-coca-cola-bottle-500ml-3d-model-3d-coke.jpg"},
+    {name:"Masala Chai", price:25, img:"https://t3.ftcdn.net/jpg/10/00/57/10/360_F_1000571096_8ZmPCpNg5FJraw8aaIOW0ZVMO3CuNOy4.jpg"},
+    /* two new items added below */
+    {name:"Lemon Soda", price:50, img:"https://c4.wallpaperflare.com/wallpaper/600/75/631/ice-squirt-green-background-wallpaper-preview.jpg"},
+    {name:"Strawberry Shake", price:140, img:"https://t3.ftcdn.net/jpg/17/21/28/56/360_F_1721285643_cxlP5m1RkngHPMx6RfiaufroHEeAlqcs.jpg"}
+  ],
+  desserts: [
+    {name:"Gulab Jamun (3 pcs)", price:150, img:"https://media.istockphoto.com/id/1194662949/photo/indian-dessert-or-sweet-dish-gulab-jamun-in-white-bowl-on-yellow-background.jpg?s=612x612&w=0&k=20&c=XAOQkQC-Mu-XXviGtWU6NTz8vZzT1sY0oaJQ4jWo2Fo="},
+    {name:"Rasgulla (3 pcs)", price:160, img:"https://t3.ftcdn.net/jpg/08/24/35/68/360_F_824356878_oxwVX80oZnLnvLtDsDgCxxJYVbTtODJm.jpg"},
+    {name:"Ice Cream", price:120, img:"https://media.istockphoto.com/id/936205852/photo/chocolate-ice-cream-in-a-glass-cup.jpg?s=612x612&w=0&k=20&c=gcPTroDVPNSlCS45BkqEG-6-REnKFEzboBpuX8O3lY4="},
+    /* two new items added below (to make dessert count 5 originally + 2 = 7; it's fine) */
+    {name:"Brownie", price:140, img:"https://t4.ftcdn.net/jpg/03/06/90/15/360_F_306901562_nT6sIcAx10Oqyf3tITJZA1T3YrkCarrD.jpg"},
+    {name:"Kulfi", price:130, img:"https://t3.ftcdn.net/jpg/08/79/74/48/360_F_879744876_BysmE0YwnaHL4APC8ax5k54wkj0wnYvK.jpg"},
+    {name:"Fruit Salad", price:110, img:"https://media.istockphoto.com/id/182781372/photo/fruit-salad.jpg?s=612x612&w=0&k=20&c=kujyO9l_9Lpt5Q8ABrHXitFpaSjdJ0bBtr_u8io_cag="},
+    {name:"Falooda", price:170, img:"https://t3.ftcdn.net/jpg/15/63/74/20/360_F_1563742097_0AGHcvWiP34kMb6JlAu0K8gsXwSYGjPa.jpg"}
+  ]
+};
+
+/* -------------------------
+   App state
+   ------------------------- */
+let cart = []; // each entry: {item, qty}
+
+/* -------------------------
+   Render items (catalog)
+   (UNCHANGED logic, but will render the new entries too)
+   ------------------------- */
+function renderCatalog(){
+  for(const cat in catalog){
+    const container = document.getElementById(cat+"Foods");
+    container.innerHTML = "";
+    catalog[cat].forEach((it, idx)=>{
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <img src="${it.img}" alt="${it.name}" loading="lazy">
+        <div class="card-body">
+          <div>
+            <h4>${it.name}</h4>
+            <p class="small">₹${it.price}</p>
+          </div>
+          <div class="card-footer">
+            <div class="small">₹${it.price}</div>
+            <button class="btn" onclick='addToCart(${JSON.stringify(it)})'>Add</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  }
+}
+renderCatalog();
+
+/* -------------------------
+   Cart functions (unchanged)
+   ------------------------- */
+function addToCart(item){
+  const idx = cart.findIndex(c => c.item.name === item.name);
+  if(idx >= 0) cart[idx].qty += 1;
+  else cart.push({item, qty:1});
+  refreshCartUI();
+  toast(`${item.name} added`);
+}
+function refreshCartUI(){
+  const container = document.getElementById("cartItems");
+  container.innerHTML = "";
+  let total = 0;
+  cart.forEach((c, i)=>{
+    const row = document.createElement("div");
+    row.className = "cart-item";
+    row.innerHTML = `
+      <img src="${c.item.img}" alt="">
+      <div style="min-width:140px">
+        <div style="font-weight:600">${c.item.name}</div>
+        <div class="small">₹${c.item.price} each</div>
+      </div>
+      <div class="qty">
+        <button onclick="changeQty(${i}, -1)">-</button>
+        <div style="min-width:22px;text-align:center">${c.qty}</div>
+        <button onclick="changeQty(${i}, 1)">+</button>
+      </div>
+      <div class="right" style="min-width:90px">
+        <div>₹${c.item.price * c.qty}</div>
+        <div style="margin-top:6px"><button class="btn" style="background:#f44336" onclick="removeItem(${i})">Remove</button></div>
+      </div>
+    `;
+    container.appendChild(row);
+    total += c.item.price * c.qty;
+  });
+  document.getElementById("cartTotal").innerText = total;
+  document.getElementById("payTotal").innerText = total;
+  document.getElementById("cartCount").innerText = cart.reduce((s,x)=>s+x.qty,0);
+  if(cart.length===0) container.innerHTML = "<div class='small'>Your cart is empty.</div>";
+}
+function changeQty(i, delta){
+  cart[i].qty += delta;
+  if(cart[i].qty <= 0) cart.splice(i,1);
+  refreshCartUI();
+}
+function removeItem(i){
+  cart.splice(i,1);
+  refreshCartUI();
+}
+function clearCart(){
+  cart = [];
+  refreshCartUI();
+  toast("Cart cleared");
+}
+
+/* -------------------------
+   Modals open/close (unchanged)
+   ------------------------- */
+function openCart(){
+  document.getElementById("cartModal").style.display = "block";
+  refreshCartUI();
+}
+function closeCart(){ document.getElementById("cartModal").style.display = "none"; }
+function openPayment(){
+  if(cart.length===0){ alert("Cart is empty."); return; }
+  document.getElementById("paymentModal").style.display = "block";
+  refreshCartUI();
+  bindPaymentRadios();
+  generateQRPlaceholder();
+}
+function closePayment(){
+  document.getElementById("paymentModal").style.display = "none";
+  document.getElementById("qrcode").innerHTML = "";
+}
+function bindPaymentRadios(){
+  document.querySelectorAll('input[name="payMethod"]').forEach(r=>{
+    r.onchange = updatePaymentUI;
+  });
+  updatePaymentUI();
+}
+function updatePaymentUI(){
+  const sel = document.querySelector('input[name="payMethod"]:checked').value;
+  document.getElementById("cardForm").style.display = sel==='card' ? 'block':'none';
+  document.getElementById("upiForm").style.display = sel==='upi' ? 'block':'none';
+  document.getElementById("qrArea").style.display = sel==='qr' ? 'block':'none';
+}
+
+/* -------------------------
+   UPI verify (SIMULATED demo) - unchanged
+   ------------------------- */
+function verifyUpi(){
+  const upi = document.getElementById("upiId").value.trim();
+  const status = document.getElementById("upiStatus");
+  const nameBox = document.getElementById("upiName");
+  nameBox.innerText = "";
+  if(!upi || !upi.includes('@')){ status.innerText = "Enter a valid UPI ID like example@upi"; return; }
+  status.innerText = "Verifying UPI ID (demo)...";
+  // SIMULATED delay to look "real-time"
+  setTimeout(()=>{
+    // Demo logic: derive display name from UPI before '@', capitalized
+    const namePart = upi.split('@')[0];
+    const pretty = namePart.split(/[._\-]/).map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(' ');
+    nameBox.innerText = `✔️ Verified (demo): ${pretty}`;
+    status.innerText = "NOTE: This is a frontend demo. For real verification integrate a payment gateway (Razorpay/Cashfree/Paytm) or bank API on server-side.";
+  }, 900);
+}
+
+/* -------------------------
+   QR: generate UPI link -> QR (unchanged)
+   ------------------------- */
+function generateQRPlaceholder(){
+  const q = document.getElementById("qrcode");
+  q.innerHTML = "";
+  // total
+  const total = document.getElementById("cartTotal").innerText || "0";
+  // merchant UPI id (demo) - change to yours for real
+  const upiId = "fastfood@upi";
+  const upiLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent('Faster Food')}&am=${encodeURIComponent(total)}&cu=INR`;
+  // make QR
+  new QRCode(q, {text:upiLink,width:150,height:150});
+}
+
+/* -------------------------
+   Card validation helpers (Luhn) - unchanged
+   ------------------------- */
+function luhnCheck(num){
+  const s = num.replace(/\s+/g,'');
+  if(!/^\d+$/.test(s)) return false;
+  let sum=0, alt=false;
+  for(let i=s.length-1;i>=0;i--){
+    let n = parseInt(s[i],10);
+    if(alt){ n *= 2; if(n>9) n -= 9; }
+    sum += n; alt = !alt;
+  }
+  return sum % 10 === 0;
+}
+
+/* -------------------------
+   Simulate payment & generate invoice (PDF) - unchanged
+   ------------------------- */
+async function simulatePay(){
+  // validate inputs
+  const method = document.querySelector('input[name="payMethod"]:checked').value;
+  const custName = document.getElementById("custName").value.trim();
+  const custPhone = document.getElementById("custPhone").value.trim();
+  const custAddr = document.getElementById("custAddr").value.trim();
+  if(!custName || !custPhone){ alert("Enter customer name and phone"); return; }
+  // card validation if card
+  if(method === 'card'){
+    const num = document.getElementById("cardNumber").value.replace(/\s+/g,'');
+    const exp = document.getElementById("cardExp").value.trim();
+    const cvv = document.getElementById("cardCVV").value.trim();
+    const nameOnCard = document.getElementById("cardName").value.trim();
+    if(!num || !exp || !cvv || !nameOnCard){ alert("Complete card details"); return; }
+    if(!luhnCheck(num)){ alert("Invalid card number (Luhn check failed)"); return; }
+    // expiry simple check
+    if(!/^\d{2}\/\d{2}$/.test(exp)){ alert("Expiry must be MM/YY"); return; }
+  }
+  // upi verification: if upi selected require verify
+  if(method === 'upi'){
+    const upiText = document.getElementById("upiId").value.trim();
+    if(!upiText){ alert("Enter UPI ID"); return; }
+    // In demo we don't do real check; assume user pressed Verify earlier
+  }
+
+  // Simulate server processing delay
+  toast("Processing payment (demo)...");
+  await new Promise(r=>setTimeout(r,1000));
+
+  // Payment "success"
+  toast("Payment successful (demo). Preparing invoice...");
+  // generate invoice PDF
+  generateInvoicePDF({custName,custPhone,custAddr,method});
+  // clear cart and close payment
+  clearCart();
+  closePayment();
+  closeCart();
+}
+
+/* -------------------------
+   Invoice PDF via jsPDF - unchanged
+   ------------------------- */
+function generateInvoicePDF({custName,custPhone,custAddr,method}){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt',format:'a4'});
+  let y = 40;
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Header
+  doc.setFontSize(18);
+  doc.text("Faster Food", 40, y);
+  doc.setFontSize(10);
+  doc.text("Invoice", pageWidth - 100, y);
+  y += 18;
+  doc.setDrawColor(220);
+  doc.line(40, y, pageWidth - 40, y);
+  y += 12;
+
+  // Order & customer
+  const oid = "FF"+Date.now().toString().slice(-6);
+  doc.setFontSize(10);
+  doc.text(`Order ID: ${oid}`, 40, y); doc.text(`Date: ${new Date().toLocaleString()}`, pageWidth - 220, y);
+  y += 14;
+  doc.text(`Customer: ${custName}`, 40, y); y += 12;
+  doc.text(`Phone: ${custPhone}`, 40, y); y += 12;
+  doc.text(`Address: ${custAddr}`, 40, y);
+  y += 18;
+
+  // Table header
+  doc.setFontSize(11);
+  doc.text("S.No", 40, y);
+  doc.text("Item", 80, y);
+  doc.text("Qty", pageWidth - 240, y);
+  doc.text("Rate", pageWidth - 160, y);
+  doc.text("Subtotal", pageWidth - 80, y);
+  y += 6;
+  doc.line(40, y, pageWidth - 40, y);
+  y += 14;
+
+  // Items
+  let total = 0;
+  cart.forEach((c, i)=>{
+    const name = c.item.name;
+    const qty = c.qty;
+    const rate = c.item.price;
+    const sub = qty * rate;
+    doc.text(String(i+1), 40, y);
+    doc.text(name, 80, y, {maxWidth: pageWidth - 380});
+    doc.text(String(qty), pageWidth - 240, y);
+    doc.text("₹"+rate, pageWidth - 160, y);
+    doc.text("₹"+sub, pageWidth - 80, y);
+    y += 14;
+    total += sub;
+    if(y > 720){ doc.addPage(); y = 40; }
+  });
+
+  // Totals & footer
+  y += 8;
+  doc.line(40, y, pageWidth - 40, y); y += 18;
+  doc.setFontSize(12);
+  doc.text("Total:", pageWidth - 160, y);
+  doc.text("₹"+total, pageWidth - 80, y);
+  y += 20;
+  doc.setFontSize(9);
+  doc.text(`Payment Method: ${method.toUpperCase()} (demo)`, 40, y);
+  y += 14;
+  doc.text("Thank you for ordering with Faster Food!", 40, y);
+
+  // Save file
+  doc.save(`FasterFood_Invoice_${oid}.pdf`);
+}
+
+/* -------------------------
+   Tiny toast - unchanged
+   ------------------------- */
+function toast(msg){
+  const t = document.createElement("div");
+  t.style.position="fixed";
+  t.style.right="18px";
+  t.style.bottom="90px";
+  t.style.background="rgba(0,0,0,0.75)";
+  t.style.color="#fff";
+  t.style.padding="10px 12px";
+  t.style.borderRadius="8px";
+  t.style.zIndex=999;
+  t.innerText = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{ t.style.transition="all 0.3s"; t.style.opacity=0; setTimeout(()=>t.remove(),350) },1400);
+}
+
+/* -------------------------
+   small helpers - unchanged
+   ------------------------- */
+function openCartOnLoadIfNeeded(){ /* placeholder */ }
+
+/* -------------------------
+   Init (render)
+   ------------------------- */
+refreshCartUI();
+openCartOnLoadIfNeeded();
+
+/* =========================
+   NEW: Suggestion / Filter logic
+   - suggestByPrice(maxPrice): shows results in #suggestResults
+   - resetCatalog(): hides suggestion and shows full catalogs again
+   This is intentionally added low-impact and does not change your existing functions.
+   ========================= */
+function suggestByPrice(){
+  const v = document.getElementById("priceInput").value.trim();
+  const max = v === "" ? null : Number(v);
+  const resContainer = document.getElementById("suggestItems");
+  const resultsSection = document.getElementById("suggestResults");
+  resContainer.innerHTML = "";
+
+  if(max === null || isNaN(max)){
+    alert("Enter a numeric maximum price.");
+    return;
+  }
+
+  // gather matches from all categories
+  const matches = [];
+  for(const cat in catalog){
+    catalog[cat].forEach(it=>{
+      if(it.price <= max) matches.push({...it, category: cat});
+    });
+  }
+
+  if(matches.length === 0){
+    resContainer.innerHTML = "<div class='small' style='padding:12px'>No items found within that price range.</div>";
+  } else {
+    matches.forEach(it=>{
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `<img src="${it.img}" alt="${it.name}" loading="lazy">
+        <div class="card-body">
+          <div>
+            <h4>${it.name}</h4>
+            <p class="small">₹${it.price} • ${capitalize(it.category)}</p>
+          </div>
+          <div class="card-footer">
+            <div class="small">₹${it.price}</div>
+            <button class="btn" onclick='addToCart(${JSON.stringify(it)})'>Add</button>
+          </div>
+        </div>`;
+      resContainer.appendChild(div);
+    });
+  }
+
+  // show suggestion section and hide the main catalogs for clarity
+  resultsSection.style.display = "block";
+  hideCatalogs(true);
+  // scroll to suggestions
+  resultsSection.scrollIntoView({behavior:'smooth'});
+}
+
+function resetCatalog(){
+  document.getElementById("priceInput").value = "";
+  document.getElementById("suggestResults").style.display = "none";
+  document.getElementById("suggestItems").innerHTML = "";
+  hideCatalogs(false);
+  // scroll to top of catalogs
+  document.querySelector('.container').scrollIntoView({behavior:'smooth'});
+}
+
+function hideCatalogs(hide){
+  const cats = ['indian','chinese','beverages','desserts'];
+  cats.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.style.display = hide ? 'none' : 'block';
+  });
+}
+
+function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+</script>
+</body>
+</html>
